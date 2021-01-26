@@ -1,5 +1,5 @@
 #!/bin/bash
-
+ 
 # archey-osx 1.6.1 (https://github.com/obihann/archey-osx/)
 
 # test to see if bash supports arrays
@@ -7,7 +7,7 @@ arraytest[0]='test' || (echo 'Error: Arrays are not supported in this version of
 bash.' && exit 2)
 
 # Detect the packager.
-if [ -x /usr/local/bin/brew ]; then
+if [ -x /opt/homebrew/bin/brew ]; then
   detectedpackager=homebrew
 elif command -v port >/dev/null; then
   detectedpackager=macports
@@ -99,11 +99,21 @@ fi
 
 distro="macOS $(sw_vers -productVersion)"
 kernel=$(uname)
-uptime=$(uptime 2> /dev/null | sed -e 's/.*up\s*//' -e 's/,\s*[0-9]* user.*//')
-shell="$SHELL"
+uptime=$(uptime 2> /dev/null | sed -e 's/.*up\s*//' -e 's/,\s*.*//')
+shell="Zsh"
 terminal="$TERM ${TERM_PROGRAM//_/ }"
 cpu=$(sysctl -n machdep.cpu.brand_string)
 battery=$(ioreg -c AppleSmartBattery -r | awk '$1~/Capacity/{c[$1]=$3} END{OFMT="%.2f%"; max=c["\"MaxCapacity\""]; if (max>0) { print 100*c["\"CurrentCapacity\""]/max;} }')
+
+battery_charge=$(ioreg -c AppleSmartBattery -r | awk '$1~/IsCharging/{c[$1]=$3} END{OFMT="%.2f%"; max=c["\"IsCharging\""]; if (max=="Yes") { print "to full";} else { print "to empty";} }')
+
+battery_time=$(ioreg -c AppleSmartBattery -r | awk '$1~/TimeRemaining/{c[$1]=$3} END{OFMT="%.2f%"; max=c["\"TimeRemaining\""]; if (max>0) { print c["\"TimeRemaining\""];} }')
+if [ $battery_time -eq 65535 ]
+then
+  battery_time=""
+else
+  battery_time="(${battery_time} min ${battery_charge})"
+fi
 
 # removes (R) and (TM) from the CPU name so it fits in a standard 80 window
 cpu=$(echo "$cpu" | awk '$1=$1' | sed 's/([A-Z]\{1,2\})//g')
@@ -129,7 +139,7 @@ fi
 
 case "${packager}" in
   homebrew)
-    packagehandler=$(brew list -1 | wc -l | awk '{print $1 }')
+    packagehandler=$(brew list --formula | wc -l | awk '{print $1 }')
     ;;
   macports)
     packagehandler=$(port installed | wc -l | awk '{print $1 }')
@@ -139,21 +149,26 @@ case "${packager}" in
     ;;
 esac
 
-fieldlist[${#fieldlist[@]}]="${textColor}User:${normal} ${user}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Hostname:${normal} ${hostname}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Distro:${normal} ${distro}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Kernel:${normal} ${kernel}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Uptime:${normal} ${uptime}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Shell:${normal} ${shell}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Terminal:${normal} ${terminal}${normal}"
+arch=$(arch)
+
+fieldlist[${#fieldlist[@]}]=""
+fieldlist[${#fieldlist[@]}]="${textColor}CPU       ${normal} ${cpu}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Distro    ${normal} ${distro}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Arch      ${normal} ${arch}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Hostname  ${normal} ${hostname}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}User      ${normal} ${user}${normal}"
+fieldlist[${#fieldlist[@]}]=""
 if [ ${packagehandler} -ne 0 ]; then
-    fieldlist[${#fieldlist[@]}]="${textColor}Packages:${normal} ${packagehandler}${normal}"
+    fieldlist[${#fieldlist[@]}]="${textColor}Packages ${normal} ${packagehandler}${normal}"
 fi
-fieldlist[${#fieldlist[@]}]="${textColor}CPU:${normal} ${cpu}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Memory:${normal} ${ram}${normal}"
-fieldlist[${#fieldlist[@]}]="${textColor}Disk:${normal} ${disk}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Memory    ${normal} ${ram}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Disk      ${normal} ${disk}${normal}"
+if [ "${opt_localip}" = t ]; then
+        fieldlist[${#fieldlist[@]}]="${textColor}Local IP  ${normal} ${localip}${normal}"
+fi
+fieldlist[${#fieldlist[@]}]="${textColor}Uptime   ${normal} ${uptime}${normal}"
 if [[ ! -z $battery ]]; then
-    fieldlist[${#fieldlist[@]}]="${textColor}Battery:${normal} ${battery}%${normal}"
+    fieldlist[${#fieldlist[@]}]="${textColor}Battery   ${normal} ${battery}% ${battery_time}${normal}"
 fi
 # Texts had to be shortend to fit in 80 window
 if [ "${opt_offline}" = f ]; then
@@ -163,9 +178,6 @@ if [ "${opt_offline}" = f ]; then
     if [ ! -z "$V6" ]; then
       fieldlist[${#fieldlist[@]}]="${textColor}IPv6:${normal} ${V6}${normal}"
     fi
-fi
-if [ "${opt_localip}" = t ]; then
-	fieldlist[${#fieldlist[@]}]="${textColor}Local IP:${normal} ${localip}${normal}"
 fi
 
 logofile=${ARCHEY_LOGO_FILE:-"${HOME}/.config/archey-logo"}
